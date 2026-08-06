@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +13,7 @@ import (
 	"github.com/km-saifullah/go-erp/internal/cache"
 	"github.com/km-saifullah/go-erp/internal/config"
 	"github.com/km-saifullah/go-erp/internal/database"
+	"github.com/km-saifullah/go-erp/internal/logger"
 	"github.com/km-saifullah/go-erp/internal/server"
 )
 
@@ -23,13 +24,20 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("configuration error: %v", err)
+		slog.Error(
+			"configuration error",
+			"error", err,
+		)
+
+		os.Exit(1)
 	}
 
-	log.Printf(
-		"configuration loaded successfully: env=%s port=%s",
-		cfg.AppEnv,
-		cfg.AppPort,
+	log := logger.New(cfg.AppEnv)
+
+	log.Info(
+		"configuration loaded successfully",
+		"environment", cfg.AppEnv,
+		"port", cfg.AppPort,
 	)
 
 	// --------------------------------------------------
@@ -38,10 +46,15 @@ func main() {
 
 	db, err := database.NewMySQL(cfg)
 	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
+		log.Error(
+			"database connection failed",
+			"error", err,
+		)
+
+		os.Exit(1)
 	}
 
-	log.Println("mysql connected successfully")
+	log.Info("mysql connected successfully")
 
 	// --------------------------------------------------
 	// Redis
@@ -49,12 +62,17 @@ func main() {
 
 	redis, err := cache.NewRedis(cfg)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 
-		log.Fatalf("redis connection failed: %v", err)
+		log.Error(
+			"redis connection failed",
+			"error", err,
+		)
+
+		os.Exit(1)
 	}
 
-	log.Println("redis connected successfully")
+	log.Info("redis connected successfully")
 
 	// --------------------------------------------------
 	// HTTP Server
@@ -67,12 +85,18 @@ func main() {
 	// --------------------------------------------------
 
 	go func() {
-		log.Printf("ERP API listening on :%s", cfg.AppPort)
+		log.Info(
+			"ERP API server started",
+			"port", cfg.AppPort,
+		)
 
 		if err := httpServer.ListenAndServe(); err != nil &&
 			!errors.Is(err, http.ErrServerClosed) {
 
-			log.Printf("HTTP server error: %v", err)
+			log.Error(
+				"HTTP server error",
+				"error", err,
+			)
 		}
 	}()
 
@@ -90,7 +114,7 @@ func main() {
 
 	<-shutdownSignal
 
-	log.Println("shutdown signal received")
+	log.Info("shutdown signal received")
 
 	// --------------------------------------------------
 	// Graceful Shutdown
@@ -102,37 +126,46 @@ func main() {
 	)
 	defer cancel()
 
-	log.Println("stopping HTTP server...")
+	log.Info("stopping HTTP server")
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		log.Error(
+			"HTTP server shutdown error",
+			"error", err,
+		)
 	}
 
-	log.Println("HTTP server stopped")
+	log.Info("HTTP server stopped")
 
 	// --------------------------------------------------
 	// Close Redis
 	// --------------------------------------------------
 
-	log.Println("closing redis connection...")
+	log.Info("closing redis connection")
 
 	if err := redis.Close(); err != nil {
-		log.Printf("redis shutdown error: %v", err)
+		log.Error(
+			"redis shutdown error",
+			"error", err,
+		)
 	} else {
-		log.Println("redis connection closed")
+		log.Info("redis connection closed")
 	}
 
 	// --------------------------------------------------
 	// Close MySQL
 	// --------------------------------------------------
 
-	log.Println("closing mysql connection...")
+	log.Info("closing mysql connection")
 
 	if err := db.Close(); err != nil {
-		log.Printf("mysql shutdown error: %v", err)
+		log.Error(
+			"mysql shutdown error",
+			"error", err,
+		)
 	} else {
-		log.Println("mysql connection closed")
+		log.Info("mysql connection closed")
 	}
 
-	log.Println("ERP API shutdown completed")
+	log.Info("ERP API shutdown completed")
 }

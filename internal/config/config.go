@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -23,24 +24,80 @@ type Config struct {
 	RedisDB       int
 }
 
-func Load() Config {
+func Load() (Config, error) {
 
 	_ = godotenv.Load()
 
-	return Config{
+	redisDB, err := strconv.Atoi(getEnv("REDIS_DB", "0"))
+	if err != nil {
+		return Config{}, fmt.Errorf("REDIS_DB must be a valid integer")
+	}
+
+	cfg := Config{
 		AppEnv:  getEnv("APP_ENV", "development"),
 		AppPort: getEnv("APP_PORT", "8000"),
 
-		MySQLHost:     getEnv("MYSQL_HOST", "127.0.0.1"),
-		MySQLPort:     getEnv("MYSQL_PORT", "3306"),
-		MySQLUser:     getEnv("MYSQL_USER", "erp"),
-		MySQLPassword: getEnv("MYSQL_PASSWORD", "erppassword"),
-		MySQLDatabase: getEnv("MYSQL_DATABASE", "erp"),
+		MySQLHost:     getEnv("MYSQL_HOST", ""),
+		MySQLPort:     getEnv("MYSQL_PORT", ""),
+		MySQLUser:     getEnv("MYSQL_USER", ""),
+		MySQLPassword: getEnv("MYSQL_PASSWORD", ""),
+		MySQLDatabase: getEnv("MYSQL_DATABASE", ""),
 
-		RedisHost:     getEnv("REDIS_HOST", "127.0.0.1"),
-		RedisPort:     getEnv("REDIS_PORT", "6379"),
+		RedisHost:     getEnv("REDIS_HOST", ""),
+		RedisPort:     getEnv("REDIS_PORT", ""),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisDB:       redisDB,
 	}
+
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+
+	return cfg, nil
+}
+
+func (c Config) Validate() error {
+	if c.AppEnv == "" {
+		return fmt.Errorf("APP_ENV is required")
+	}
+
+	if c.AppPort == "" {
+		return fmt.Errorf("APP_PORT is required")
+	}
+
+	if c.MySQLHost == "" {
+		return fmt.Errorf("MYSQL_HOST is required")
+	}
+
+	if c.MySQLPort == "" {
+		return fmt.Errorf("MYSQL_PORT is required")
+	}
+
+	if c.MySQLUser == "" {
+		return fmt.Errorf("MYSQL_USER is required")
+	}
+
+	if c.MySQLPassword == "" {
+		return fmt.Errorf("MYSQL_PASSWORD is required")
+	}
+
+	if c.MySQLDatabase == "" {
+		return fmt.Errorf("MYSQL_DATABASE is required")
+	}
+
+	if c.RedisHost == "" {
+		return fmt.Errorf("REDIS_HOST is required")
+	}
+
+	if c.RedisPort == "" {
+		return fmt.Errorf("REDIS_PORT is required")
+	}
+
+	if c.RedisDB < 0 {
+		return fmt.Errorf("REDIS_DB cannot be negative")
+	}
+
+	return nil
 }
 
 func (c Config) MySQLDSN() string {

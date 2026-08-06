@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -18,12 +19,30 @@ func NewRedis(cfg config.Config) (*Redis, error) {
 		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+
+		// Connection pool configuration.
+		PoolSize:     20,
+		MinIdleConns: 5,
+
+		// Connection lifetime.
+		ConnMaxLifetime: 30 * time.Minute,
+
+		// Timeouts.
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
 	})
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, err
+		_ = client.Close()
+
+		return nil, fmt.Errorf("failed to ping redis: %w", err)
 	}
 
 	return &Redis{
@@ -32,5 +51,9 @@ func NewRedis(cfg config.Config) (*Redis, error) {
 }
 
 func (r *Redis) Close() error {
+	if r == nil || r.Client == nil {
+		return nil
+	}
+
 	return r.Client.Close()
 }
